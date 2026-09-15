@@ -1,49 +1,50 @@
-name: spring boot build and deploy
+name: Spring Boot Build and Deploy
 
 on:
- push:
-  branches:
-     -main 
+  push:
+    branches:
+      - main
+
 env:
-  IMAGE_NAME:my-spring-app
+  IMAGE_NAME: my-spring-app
+
 jobs:
   build-deploy:
-   runs-on: ubuntu-latest
-   steps:
-    -name: Checkout Source
-     uses: actions/checkout@v4
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
 
-    -name: Setting Up Java 
-     uses: actions/setup-java@v4
-     with: 
-       distribution: temurin
-       java-version: 21
-       cache: maven
+      - name: Setting Up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
 
-    -name: Build Jar
-     run: mvn clean package -DskipTests
+      - name: Build Jar
+        run: mvn clean package -DskipTests
 
-    -name: Build Docker Image
-     run: docker build -t ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest  .
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-    -name: Login to dockerhub
-     uses: docker/login-action@v4
-      with:
-       usename:${{ secrets.DOCKER_USERNAME }}
-       password: ${{ secrets.DOCKER_PASSWORD}}
+      - name: Build and Push Docker Image
+        run: |
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest .
+          docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
 
-    -name: Push Image
-     run: docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
-
-    -name: Deploy to EC2
-     uses: appleboy/ssh-action@1.2.0
-     with: 
-      host: ${{ secrets.EC2_HOST}}
-      username: ${{ secrets.EC2_USER}}
-      key: ${{ secrets.EC2_SSH_KEY}}
-      script: |
-        docker pull ${{ secrets.DOCKER_USERNAME}}/${{ env.IMAGE_NAME}}:latest
-        docker stop spring-app || true
-        docker rm spring-app || true
-        docker run -d --name spring-app -p 8080:8080 ${{ secrets.DOCKER_USERNAME}}/${{ env.IMAGE_NAME}}:latest
-        docker image prune -f 
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            docker pull ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+            docker stop spring-app || true
+            docker rm spring-app || true
+            docker run -d --name spring-app -p 8080:8080 ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+            docker image prune -f
